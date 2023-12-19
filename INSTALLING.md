@@ -6,7 +6,7 @@ a container or chroot for building.
 
 ## Installing host dependencies:
 ```
-sudo apt -y install binfmt-support pv qemu-user-static debootstrap kpartx lvm2 dosfstools gpart binutils git libncurses-dev python3-m2crypto gawk wget git-core diffstat unzip texinfo gcc-multilib build-essential chrpath socat libsdl1.2-dev autoconf libtool libglib2.0-dev libarchive-dev python3-git xterm sed cvs subversion coreutils texi2html docbook-utils help2man make gcc g++ desktop-file-utils libgl1-mesa-dev libglu1-mesa-dev mercurial automake groff curl lzop asciidoc u-boot-tools mtd-utils libgnutls28-dev
+sudo apt -y install binfmt-support pv qemu-user-static debootstrap kpartx lvm2 dosfstools gpart binutils git libncurses-dev python3-m2crypto gawk wget git-core diffstat unzip texinfo gcc-multilib build-essential chrpath socat libsdl1.2-dev autoconf libtool libglib2.0-dev libarchive-dev python3-git xterm sed cvs subversion coreutils texi2html docbook-utils help2man make gcc g++ desktop-file-utils libgl1-mesa-dev libglu1-mesa-dev mercurial automake groff curl lzop asciidoc u-boot-tools mtd-utils libgnutls28-dev flex bison libssl-dev
 ```
 
 ## Installing the sources
