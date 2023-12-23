@@ -141,6 +141,8 @@ function create_image () {
     dd if=output/imx-boot-sd.bin of=${PARTITION}1 bs=1K status=noxfer status=progress 2>/dev/null
 
     echo "Installing OS                 to ${PARTITION}3"
+    #pv output/rootfs-base.tar.gz | tar -xzp -C sdcard
+    #pv output/rootfs-variscite.tar.gz | tar -xzp -C sdcard
     pv output/rootfs.tar.gz | tar -xzp -C sdcard
 
     echo "Syncing disks..."

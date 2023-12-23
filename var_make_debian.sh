@@ -688,6 +688,7 @@ function make_imx_sdma_fw() {
 # $2 -- rootfs output dir
 function make_bcm_fw()
 {
+local ROOTFS_BASE=$2
 	pr_info "Make and install bcm configs and firmware"
 
 	install -d ${2}/lib/firmware/bcm
@@ -700,6 +701,17 @@ function make_bcm_fw()
 		install -m 0644 ${1}/LICENSE ${2}/lib/firmware/bcm/
 	fi
 	install -m 0644 ${1}/LICENSE ${2}/lib/firmware/brcm/
+
+	echo "Verifying the contents of ${ROOTFS_BASE}:"
+	ls -l ${ROOTFS_BASE}
+	# Repackaging with Variscite customizations.
+	pr_info "Repackaging with Variscite customizations"
+	if [ -d "${ROOTFS_BASE}" ] && [ "$(ls -A ${ROOTFS_BASE})" ]; then
+    tar czvf ${PARAM_OUTPUT_DIR}/rootfs-variscite.tar.gz -C ${ROOTFS_BASE} .
+	else
+    	echo "Error: The directory ${ROOTFS_BASE}  does not exist or is empty."
+    	exit 1
+	fi
 }
 
 ################ commands ################
@@ -825,6 +837,11 @@ function cmd_make_rootfs()
 	if [ ! -z "${G_BCM_FW_GIT}" ]; then
 		make_bcm_fw ${G_BCM_FW_SRC_DIR} ${G_ROOTFS_DIR}
 	fi
+
+	# make meticulous weston rootfs
+	cd ${G_ROOTFS_DIR}
+	make_meticulous_weston_rootfs ${G_ROOTFS_DIR}
+	cd -
 
 	# pack full rootfs
 	make_tarball ${G_ROOTFS_DIR} ${G_ROOTFS_TARBALL_PATH}

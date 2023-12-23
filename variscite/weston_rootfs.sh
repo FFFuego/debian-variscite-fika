@@ -28,6 +28,20 @@ function make_debian_weston_rootfs()
 	mount -o bind /sys ${ROOTFS_BASE}/sys
 	chroot $ROOTFS_BASE /debootstrap/debootstrap --second-stage --verbose
 
+	#Package the base Debian image into a tar.gz file
+	pr_info "Packaging the base Debian image"
+	if [ -d "${ROOTFS_BASE}" ] && [ "$(ls -A ${ROOTFS_BASE})" ]; then
+    tar czvf ${PARAM_OUTPUT_DIR}/rootfs-base.tar.gz -C ${ROOTFS_BASE} .
+	else
+    	echo "Error: The directory ${ROOTFS_BASE}  does not exist or is empty."
+    	exit 1
+	fi
+
+	# Unpack the base image to continue with customizations
+	pr_info "Unpacking the base Debian image."
+	tar xzvf ${PARAM_OUTPUT_DIR}/rootfs-base.tar.gz -C ${ROOTFS_BASE}
+
+
 	# delete unused folder
 	chroot $ROOTFS_BASE rm -rf ${ROOTFS_BASE}/debootstrap
 
@@ -749,29 +763,6 @@ EOF
 	chmod +x header-stage
 	chroot ${ROOTFS_BASE} /header-stage
 
-	curl -s https://dial-app.meticuloushome.com/prod/meticulous-ui-latest.deb -o ${ROOTFS_BASE}/tmp/meticulous-ui-latest.deb
-	G_USER_PACKAGES="${G_USER_PACKAGES} /tmp/meticulous-ui-latest.deb"
-
-	#Install user pacakges if any
-	if [ "${G_USER_PACKAGES}" != "" ] ; then
-		pr_info "rootfs: install user defined packages (user-stage)"
-		pr_info "rootfs: G_USER_PACKAGES \"${G_USER_PACKAGES}\" "
-
-		echo "#!/bin/bash
-		# update packages
-		apt-get update
-		apt-get -y upgrade
-
-		# install all user packages
-		apt-get -y install ${G_USER_PACKAGES}
-
-		rm -f user-stage
-		" > user-stage
-
-		chmod +x user-stage
-		chroot ${ROOTFS_BASE} /user-stage
-	fi
-
 	# binaries rootfs patching
 	install -m 0644 ${G_VARISCITE_PATH}/issue ${ROOTFS_BASE}/etc/
 	install -m 0644 ${G_VARISCITE_PATH}/issue.net ${ROOTFS_BASE}/etc/
@@ -822,54 +813,6 @@ EOF
 	if [ "${MACHINE}" = "imx8m-var-dart" ]; then
 		cp ${G_VARISCITE_PATH}/${MACHINE}/*.rules ${ROOTFS_BASE}/etc/udev/rules.d
 	fi
-
-
-
-	# install meticulous services
-
-	install -m 0644 ${G_VARISCITE_PATH}/meticulous-ui.service \
-		${ROOTFS_BASE}/lib/systemd/system
-	ln -s /lib/systemd/system/meticulous-ui.service \
-		${ROOTFS_BASE}/etc/systemd/system/multi-user.target.wants/meticulous-ui.service
-
-	install -m 0644 ${G_VARISCITE_PATH}/meticulous-backend.service \
-		${ROOTFS_BASE}/lib/systemd/system
-	ln -s /lib/systemd/system/meticulous-backend.service \
-		${ROOTFS_BASE}/etc/systemd/system/multi-user.target.wants/meticulous-backend.service
-
-	# install python
-	tar xf ${G_VARISCITE_PATH}/python/python3.12.tar.gz -C ${ROOTFS_BASE}
-
-	## Reinstall pip3.12 as it is usually expecting python at the wrong location
-	rm -rf ${ROOTFS_BASE}/usr/lib/python3.12/site-packages/pip*
-	chroot ${ROOTFS_BASE} bash -c "python3.12 -m ensurepip --upgrade --altinstall"
-
-	# Install python requirements for meticulous
-	cp ${G_VARISCITE_PATH}/python-requirements.txt ${ROOTFS_BASE}/tmp/python-requirements.txt
-	chroot ${ROOTFS_BASE} bash -c "python3.12 -m pip install -r /tmp/python-requirements.txt"
-
-
-	#clenup command
-	echo "#!/bin/bash
-	apt-get clean
-	rm -rf /tmp/*
-	rm -f cleanup
-	" > cleanup
-
-	# clean all packages
-	pr_info "rootfs: clean"
-	chmod +x cleanup
-	chroot ${ROOTFS_BASE} /cleanup
-	umount ${ROOTFS_BASE}/{sys,proc,dev/pts,dev} 2>/dev/null || true
-
-	# kill latest dbus-daemon instance due to qemu-aarch64-static
-	QEMU_PROC_ID=$(ps axf | grep dbus-daemon | grep qemu-aarch64-static | awk '{print $1}')
-	if [ -n "$QEMU_PROC_ID" ]
-	then
-		kill -9 $QEMU_PROC_ID
-	fi
-
-	rm -f ${ROOTFS_BASE}/usr/bin/qemu-aarch64-static
 }
 
 # make SD card for device
@@ -1029,4 +972,87 @@ EOF
 	rm -rf ${P1_MOUNT_DIR}
 
 	pr_info "The SD card is ready"
+}
+
+function make_meticulous_weston_rootfs()
+{
+	local ROOTFS_BASE=$1
+	
+	# Unpack the image that includes the packages for Variscite
+	pr_info "Unpacking the image that includes packages for Variscite"
+	tar xzvf ${PARAM_OUTPUT_DIR}/rootfs-variscite.tar.gz -C ${ROOTFS_BASE}
+
+	# install meticulous services
+	curl -s https://dial-app.meticuloushome.com/prod/meticulous-ui-latest.deb -o ${ROOTFS_BASE}/tmp/meticulous-ui-latest.deb
+	G_USER_PACKAGES="${G_USER_PACKAGES} /tmp/meticulous-ui-latest.deb"
+
+	#Install user pacakges if any
+	if [ "${G_USER_PACKAGES}" != "" ] ; then
+		pr_info "rootfs: install user defined packages (user-stage)"
+		pr_info "rootfs: G_USER_PACKAGES \"${G_USER_PACKAGES}\" "
+
+		echo "#!/bin/bash
+		# update packages
+		apt-get update
+		apt-get -y upgrade
+
+		# install all user packages
+		apt-get -y install ${G_USER_PACKAGES}
+
+		rm -f user-stage
+		" > user-stage
+
+		chmod +x user-stage
+		chroot ${ROOTFS_BASE} /user-stage
+	fi
+
+	install -m 0644 ${G_VARISCITE_PATH}/meticulous-ui.service \
+		${ROOTFS_BASE}/lib/systemd/system
+	ln -s /lib/systemd/system/meticulous-ui.service \
+		${ROOTFS_BASE}/etc/systemd/system/multi-user.target.wants/meticulous-ui.service
+
+	install -m 0644 ${G_VARISCITE_PATH}/meticulous-backend.service \
+		${ROOTFS_BASE}/lib/systemd/system
+	ln -s /lib/systemd/system/meticulous-backend.service \
+		${ROOTFS_BASE}/etc/systemd/system/multi-user.target.wants/meticulous-backend.service
+
+	# install python
+	tar xf ${G_VARISCITE_PATH}/python/python3.12.tar.gz -C ${ROOTFS_BASE}
+
+	## Reinstall pip3.12 as it is usually expecting python at the wrong location
+	rm -rf ${ROOTFS_BASE}/usr/lib/python3.12/site-packages/pip*
+	chroot ${ROOTFS_BASE} bash -c "python3.12 -m ensurepip --upgrade --altinstall"
+
+	# Install python requirements for meticulous
+	cp ${G_VARISCITE_PATH}/python-requirements.txt ${ROOTFS_BASE}/tmp/python-requirements.txt
+	chroot ${ROOTFS_BASE} bash -c "python3.12 -m pip install -r /tmp/python-requirements.txt"
+
+	#Installing Meticulous packages
+	#chroot ${ROOTFS_BASE} /bin/bash -c "
+    #for pkg in $(cat meticulous_packages.txt); do
+    #    apt-get install ${pkg}
+    #done
+	#"
+
+	#clenup command
+	echo "#!/bin/bash
+	apt-get clean
+	rm -rf /tmp/*
+	rm -f cleanup
+	" > cleanup
+
+	# clean all packages
+	pr_info "rootfs: clean"
+	chmod +x cleanup
+	chroot ${ROOTFS_BASE} /cleanup
+	umount ${ROOTFS_BASE}/{sys,proc,dev/pts,dev} 2>/dev/null || true
+
+	# kill latest dbus-daemon instance due to qemu-aarch64-static
+	QEMU_PROC_ID=$(ps axf | grep dbus-daemon | grep qemu-aarch64-static | awk '{print $1}')
+	if [ -n "$QEMU_PROC_ID" ]
+	then
+		kill -9 $QEMU_PROC_ID
+	fi
+
+	rm -f ${ROOTFS_BASE}/usr/bin/qemu-aarch64-static
 }
