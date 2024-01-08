@@ -707,7 +707,7 @@ local ROOTFS_BASE=$2
 	# Repackaging with Variscite customizations.
 	pr_info "Repackaging with Variscite customizations"
 	if [ -d "${ROOTFS_BASE}" ] && [ "$(ls -A ${ROOTFS_BASE})" ]; then
-    tar czvf ${PARAM_OUTPUT_DIR}/rootfs-variscite.tar.gz -C ${ROOTFS_BASE} .
+    	tar czvf ${PARAM_OUTPUT_DIR}/rootfs-variscite.tar.gz -C ${ROOTFS_BASE} .
 	else
     	echo "Error: The directory ${ROOTFS_BASE}  does not exist or is empty."
     	exit 1
@@ -833,6 +833,10 @@ function cmd_make_rootfs()
 	make_debian_weston_rootfs ${G_ROOTFS_DIR}
 	cd -
 
+	cd ${G_ROOTFS_DIR}
+	make_variscite_weston_rootfs ${G_ROOTFS_DIR}
+	cd -
+
 	# make bcm firmwares
 	if [ ! -z "${G_BCM_FW_GIT}" ]; then
 		make_bcm_fw ${G_BCM_FW_SRC_DIR} ${G_ROOTFS_DIR}
@@ -845,6 +849,39 @@ function cmd_make_rootfs()
 
 	# pack full rootfs
 	make_tarball ${G_ROOTFS_DIR} ${G_ROOTFS_TARBALL_PATH}
+}
+
+function cmd_make_variscite_rootfs()
+{
+	make_prepare;
+
+	# make debian weston backend rootfs for imx8 family
+	cd ${G_ROOTFS_DIR}
+	make_debian_weston_rootfs ${G_ROOTFS_DIR}
+	cd -
+
+	cd ${G_ROOTFS_DIR}
+	make_variscite_weston_rootfs ${G_ROOTFS_DIR}
+	cd -
+
+	# make bcm firmwares
+	if [ ! -z "${G_BCM_FW_GIT}" ]; then
+		make_bcm_fw ${G_BCM_FW_SRC_DIR} ${G_ROOTFS_DIR}
+	fi
+
+	mv ${PARAM_OUTPUT_DIR}/rootfs-variscite.tar.gz ${PARAM_OUTPUT_DIR}/rootfs.tar.gz
+}
+
+function cmd_make_debian_base_rootfs()
+{
+	make_prepare;
+
+	# make debian weston backend rootfs for imx8 family
+	cd ${G_ROOTFS_DIR}
+	make_debian_weston_rootfs ${G_ROOTFS_DIR}
+	cd -
+
+	mv ${PARAM_OUTPUT_DIR}/rootfs-base.tar.gz ${PARAM_OUTPUT_DIR}/rootfs.tar.gz
 }
 
 function cmd_make_freertos_variscite()
@@ -985,6 +1022,21 @@ case $PARAM_CMD in
 		;;
 	freertosvariscite )
 		cmd_make_freertos_variscite
+		;;
+	debianbase )
+		cmd_make_uboot  &&
+		cmd_make_kernel &&
+		cmd_make_kmodules &&
+		cmd_make_kernel_header_deb &&
+		cmd_make_debian_base_rootfs
+		;;
+	variscite )
+		cmd_make_uboot  &&
+		cmd_make_kernel &&
+		cmd_make_kmodules &&
+		cmd_make_kernel_header_deb &&
+		cmd_make_freertos_variscite &&
+		cmd_make_variscite_rootfs
 		;;
 	all )
 		cmd_make_uboot  &&

@@ -31,12 +31,17 @@ function make_debian_weston_rootfs()
 	#Package the base Debian image into a tar.gz file
 	pr_info "Packaging the base Debian image"
 	if [ -d "${ROOTFS_BASE}" ] && [ "$(ls -A ${ROOTFS_BASE})" ]; then
-    tar czvf ${PARAM_OUTPUT_DIR}/rootfs-base.tar.gz -C ${ROOTFS_BASE} .
+    	tar czvf ${PARAM_OUTPUT_DIR}/rootfs-base.tar.gz -C ${ROOTFS_BASE} .
 	else
     	echo "Error: The directory ${ROOTFS_BASE}  does not exist or is empty."
     	exit 1
 	fi
+}
 
+function make_variscite_weston_rootfs()
+{
+	local ROOTFS_BASE=$1
+	
 	# Unpack the base image to continue with customizations
 	pr_info "Unpacking the base Debian image."
 	tar xzvf ${PARAM_OUTPUT_DIR}/rootfs-base.tar.gz -C ${ROOTFS_BASE}
@@ -1026,13 +1031,6 @@ function make_meticulous_weston_rootfs()
 	# Install python requirements for meticulous
 	cp ${G_VARISCITE_PATH}/python-requirements.txt ${ROOTFS_BASE}/tmp/python-requirements.txt
 	chroot ${ROOTFS_BASE} bash -c "python3.12 -m pip install -r /tmp/python-requirements.txt"
-
-	#Installing Meticulous packages
-	#chroot ${ROOTFS_BASE} /bin/bash -c "
-    #for pkg in $(cat meticulous_packages.txt); do
-    #    apt-get install ${pkg}
-    #done
-	#"
 
 	#clenup command
 	echo "#!/bin/bash

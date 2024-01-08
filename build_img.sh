@@ -2,7 +2,7 @@
 set -eo pipefail
 
 declare    IMAGE_TARGET="sdcard.img"
-#declare    IMAGE_TARGET="/dev/sdc"
+#declare    IMAGE_TARGET="/dev/sdb"
 declare -i IMAGE_SIZE=16 # in GiB
 
 # Bootloader
