@@ -6,6 +6,8 @@ set -e
 
 SCRIPT_NAME=${0##*/}
 
+ARCHITECTURE=$(uname -m)
+
 #### Exports Variables ####
 #### global variables ####
 readonly ABSOLUTE_FILENAME=`readlink -e "$0"`
@@ -23,9 +25,14 @@ readonly DEF_BUILDENV="${ABSOLUTE_DIRECTORY}"
 readonly DEF_SRC_DIR="${DEF_BUILDENV}/src"
 readonly G_ROOTFS_DIR="${DEF_BUILDENV}/rootfs"
 readonly G_TMP_DIR="${DEF_BUILDENV}/tmp"
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 readonly G_TOOLS_PATH="${DEF_BUILDENV}/toolchain"
+else
+	echo "Delete reference to G_TOOLS_PATH"
+fi
 readonly G_VARISCITE_PATH="${DEF_BUILDENV}/variscite"
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 #64 bit CROSS_COMPILER config and paths
 readonly G_CROSS_COMPILER_64BIT_NAME="gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu"
 readonly G_CROSS_COMPILER_ARCHIVE_64BIT="${G_CROSS_COMPILER_64BIT_NAME}.tar.xz"
@@ -37,6 +44,9 @@ readonly G_CROSS_COMPILER_32BIT_NAME="gcc-linaro-6.3.1-2017.05-x86_64_arm-linux-
 readonly G_CROSS_COMPILER_ARCHIVE_32BIT="${G_CROSS_COMPILER_32BIT_NAME}.tar.xz"
 readonly G_EXT_CROSS_32BIT_COMPILER_LINK="http://releases.linaro.org/components/toolchain/binaries/6.3-2017.05/arm-linux-gnueabihf/${G_CROSS_COMPILER_ARCHIVE_32BIT}"
 readonly G_CROSS_COMPILER_32BIT_PREFIX="arm-linux-gnueabihf-"
+else
+	echo "Remove cross compiler related setting"
+fi
 
 readonly G_CROSS_COMPILER_JOPTION="-j`nproc`"
 
@@ -99,11 +109,15 @@ if [ ! -z "${G_FREERTOS_VAR_SRC_DIR}" ]; then
 	readonly G_FREERTOS_VAR_BUILD_DIR="${G_FREERTOS_VAR_SRC_DIR}.build"
 fi
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 # Setup cross compiler path, name, kernel dtb path, kernel image type, helper scripts
 G_CROSS_COMPILER_NAME=${G_CROSS_COMPILER_64BIT_NAME}
 G_EXT_CROSS_COMPILER_LINK=${G_EXT_CROSS_64BIT_COMPILER_LINK}
 G_CROSS_COMPILER_ARCHIVE=${G_CROSS_COMPILER_ARCHIVE_64BIT}
 G_CROSS_COMPILER_PREFIX=${G_CROSS_COMPILER_64BIT_PREFIX}
+else
+	echo "Ignores configurations for _x64 architecture"
+fi
 ARCH_ARGS="arm64"
 BUILD_IMAGE_TYPE="Image.gz"
 KERNEL_BOOT_IMAGE_SRC="arch/arm64/boot/"
@@ -253,8 +267,10 @@ function make_prepare()
 	# create src dir
 	mkdir -p ${DEF_SRC_DIR}
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	# create toolchain dir
 	mkdir -p ${G_TOOLS_PATH}
+fi
 
 	# create rootfs dir
 	mkdir -p ${G_ROOTFS_DIR}
@@ -300,18 +316,29 @@ function make_tarball()
 function make_kernel()
 {
 	pr_info "make kernel .config"
-	make ARCH=${ARCH_ARGS} CROSS_COMPILE=${1} ${G_CROSS_COMPILER_JOPTION} -C ${4}/ ${2}
 
+    if [[ "$ARCHITECTURE" == "x86_64" ]]; then
+	make ARCH=${ARCH_ARGS} CROSS_COMPILE=${1} ${G_CROSS_COMPILER_JOPTION} -C ${4}/ ${2}
+else
+        make ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} -C ${4}/ ${2}
+    fi
 	pr_info "make kernel"
 	if [ ! -z "${UIMAGE_LOADADDR}" ]; then
 		IMAGE_EXTRA_ARGS="LOADADDR=${UIMAGE_LOADADDR}"
 	fi
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	make CROSS_COMPILE=${1} ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} ${IMAGE_EXTRA_ARGS}\
 			-C ${4}/ ${BUILD_IMAGE_TYPE}
-
+else
+        make ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} ${IMAGE_EXTRA_ARGS}\
+            -C ${4}/ ${BUILD_IMAGE_TYPE}
+    fi    
 	pr_info "make ${3}"
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	make CROSS_COMPILE=${1} ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} -C ${4} ${3}
-
+else
+        make ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} -C ${4} ${3}
+    fi
 	pr_info "Copy kernel and dtb files to output dir: ${5}"
 	cp ${4}/${KERNEL_BOOT_IMAGE_SRC}/${BUILD_IMAGE_TYPE} ${5}/;
 	cp ${4}/${KERNEL_DTB_IMAGE_PATH}*.dtb ${5}/;
@@ -333,11 +360,21 @@ function clean_kernel()
 # $4 -- out modules path
 function make_kernel_modules()
 {
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	pr_info "make kernel defconfig"
 	make ARCH=${ARCH_ARGS} CROSS_COMPILE=${1} ${G_CROSS_COMPILER_JOPTION} -C ${3} ${2}
+else
+		pr_info "make kernel defconfig for arm"
+    		make ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} -C ${3} ${2}
+	fi
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	pr_info "Compiling kernel modules"
 	make ARCH=${ARCH_ARGS} CROSS_COMPILE=${1} ${G_CROSS_COMPILER_JOPTION} -C ${3} modules
+else
+		pr_info "Compiling kernel modules for arm"
+        	make ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} -C ${3} modules
+	fi
 }
 
 # make Linux kernel headers package
@@ -351,9 +388,16 @@ function make_kernel_headers_package()
 	create_debian_kernel_headers_package ${3} \
 		${PARAM_OUTPUT_DIR}/kernel-headers ${G_VARISCITE_PATH}
 	pr_info "Installing kernel modules to ${4}"
+
+	if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	make ARCH=${ARCH_ARGS} CROSS_COMPILE=${1} \
 		${G_CROSS_COMPILER_JOPTION} -C ${3} \
 		INSTALL_MOD_PATH=${4} modules_install
+else
+		make ARCH=${ARCH_ARGS} \
+        		${G_CROSS_COMPILER_JOPTION} -C ${3} \
+        		INSTALL_MOD_PATH=${4} modules_install
+	fi
 }
 # install the Linux kernel modules
 # $1 -- cross compiler prefix
@@ -362,13 +406,25 @@ function make_kernel_headers_package()
 # $4 -- out modules path
 function install_kernel_modules()
 {
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	pr_info "Installing kernel headers to ${4}"
 	make ARCH=${ARCH_ARGS} CROSS_COMPILE=${1} ${G_CROSS_COMPILER_JOPTION} -C ${3} \
 		INSTALL_HDR_PATH=${4}/usr/local headers_install
+else
+		pr_info "Installing kernel headers to ${4}"
+		make ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} -C ${3} \
+			INSTALL_HDR_PATH=${4}/usr/local headers_install
+	fi
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	pr_info "Installing kernel modules to ${4}"
 	make ARCH=${ARCH_ARGS} CROSS_COMPILE=${1} ${G_CROSS_COMPILER_JOPTION} -C ${3} \
 		INSTALL_MOD_PATH=${4} modules_install
+else
+		pr_info "Installing kernel modules to ${4}"
+		make ARCH=${ARCH_ARGS} ${G_CROSS_COMPILER_JOPTION} -C ${3} \
+			INSTALL_MOD_PATH=${4} modules_install
+	fi
 }
 
 compile_fw() {
@@ -455,31 +511,63 @@ function make_uboot()
 {
 	pr_info "Make U-Boot: ${G_UBOOT_DEF_CONFIG_MMC}"
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	# clean work directory
 	make ARCH=${ARCH_ARGS} -C ${1} \
 		CROSS_COMPILE=${G_CROSS_COMPILER_PATH}/${G_CROSS_COMPILER_PREFIX} \
 		${G_CROSS_COMPILER_JOPTION} mrproper
+else
+		make ARCH=${ARCH_ARGS} -C ${1} \
+			${G_CROSS_COMPILER_JOPTION} mrproper
+	fi
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	# make U-Boot mmc defconfig
 	make ARCH=${ARCH_ARGS} -C ${1} \
 		CROSS_COMPILE=${G_CROSS_COMPILER_PATH}/${G_CROSS_COMPILER_PREFIX} \
 		${G_CROSS_COMPILER_JOPTION} ${G_UBOOT_DEF_CONFIG_MMC}
+else
+		make ARCH=${ARCH_ARGS} -C ${1} \
+			${G_CROSS_COMPILER_JOPTION} ${G_UBOOT_DEF_CONFIG_MMC}
+	fi
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	# make U-Boot
 	make -C ${1} \
 		CROSS_COMPILE=${G_CROSS_COMPILER_PATH}/${G_CROSS_COMPILER_PREFIX} \
 		${G_CROSS_COMPILER_JOPTION}
+else
+		# make U-Boot
+		make -C ${1} \
+			${G_CROSS_COMPILER_JOPTION}
+	fi
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	# make fw_printenv
 	make envtools -C ${1} \
 		CROSS_COMPILE=${G_CROSS_COMPILER_PATH}/${G_CROSS_COMPILER_PREFIX} \
 		${G_CROSS_COMPILER_JOPTION}
+else
+		make envtools -C ${1} \
+			${G_CROSS_COMPILER_JOPTION}
+	fi
 
 	cp ${1}/tools/env/fw_printenv ${2}
 
+if [[ "$ARCHITECTURE" == "x86_64" ]]; then
 	cd ${DEF_SRC_DIR}/imx-atf
 	LDFLAGS="" make CROSS_COMPILE=${G_CROSS_COMPILER_PATH}/${G_CROSS_COMPILER_PREFIX} \
 			PLAT=imx8mn bl31
+else
+		cd ${DEF_SRC_DIR}/imx-atf
+		cp Makefile Makefile.backup
+
+		# Modificar Makefile para incluir las opciones adicionales
+		sed -i 's|ERRORS := -Werror|ERRORS := -Werror -Wno-error=array-bounds|' Makefile
+		sed -i '/TF_LDFLAGS.*--gc-sections/a TF_LDFLAGS        +=      --no-warn-rwx-segment' Makefile
+		
+		LDFLAGS="" make PLAT=imx8mn bl31
+	fi
 	cd -
 	cp ${DEF_SRC_DIR}/imx-atf/build/imx8mn/release/bl31.bin \
 		src/imx-mkimage/iMX8M/bl31.bin
