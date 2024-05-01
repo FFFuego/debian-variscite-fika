@@ -302,6 +302,22 @@ protected_install openssh-sftp-server
 protected_install openssh-server
 protected_install nfs-common
 
+# install packages for rauc
+protected_install git
+protected_install autoconf
+protected_install automake
+protected_install libtool
+protected_install pkg-config
+protected_install libdbus-1-dev
+protected_install libglib2.0-dev
+protected_install libgio2.0-cil-dev
+protected_install libgirepository1.0-dev
+protected_install libjson-glib-dev
+protected_install libssl-dev
+protected_install libcurl4-openssl-dev
+protected_install libnl-genl-3-dev
+protected_install meson
+
 # packages required when flashing emmc
 protected_install dosfstools
 

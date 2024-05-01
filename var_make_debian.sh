@@ -46,6 +46,18 @@ fi
 
 readonly G_CROSS_COMPILER_JOPTION="-j`nproc`"
 
+#rauc clone and build
+readonly RAUC_SRC_DIR="${DEF_SRC_DIR}/rauc"
+readonly G_RAUC_GIT="https://github.com/rauc/rauc.git"
+readonly RAUC_BRANCH="v1.8"
+readonly RAUC_REV="HEAD"
+
+#hawkbit clone and build
+readonly HAWKBIT_SRC_DIR="${DEF_SRC_DIR}/hawkbit"
+readonly G_HAWKBIT_GIT="https://github.com/rauc/rauc-hawkbit-updater.git"
+readonly HAWKBIT_BRANCH="master"
+readonly HAWKBIT_REV="HEAD"
+
 #### user rootfs packages ####
 export LC_ALL=C
 
@@ -239,6 +251,27 @@ function get_git_src()
 	git checkout origin/${2} -B ${2} -f
 	git reset --hard ${4}
 	cd -
+}
+
+#Clone repository and checkout tag
+function get_git_src_for_tag() {
+    if ! [ -d "$3" ]; then
+        # clone src code
+        git clone "$1" "$3" --no-checkout
+    fi
+    pushd "$3" > /dev/null
+    # Fetch all tags
+    git fetch --tags
+    # Try checkout tag
+    if git show-ref --verify --quiet "refs/tags/$2"; then
+        git checkout "$2"
+    else
+        echo "Error: $2 is not a tag in $1"
+        popd > /dev/null
+        return 1
+    fi
+
+    popd > /dev/null
 }
 
 # get remote file
@@ -599,6 +632,61 @@ function clean_uboot()
 	make ARCH=${ARCH_ARGS} -C ${1}/ mrproper
 }
 
+function make_rauc() {
+    echo "Building RAUC"
+    # Copy files from $RAUC_SRC_DIR to ${G_ROOTFS_DIR}/home
+    sudo cp -r "$RAUC_SRC_DIR" "${G_ROOTFS_DIR}/home/"
+
+    SYSROOT_PATH=${G_ROOTFS_DIR} 
+    
+    # Mount directories
+    sudo mount --bind /proc "$SYSROOT_PATH/proc"
+    sudo mount --bind /sys "$SYSROOT_PATH/sys"
+    sudo mount --bind /dev "$SYSROOT_PATH/dev"
+    sudo mount --bind /dev/pts "$SYSROOT_PATH/dev/pts"
+    
+    # Use chroot to run build commands
+    sudo chroot "$SYSROOT_PATH" /bin/bash -c "\
+        cd /home/rauc && \
+        ./autogen.sh && \
+        ./configure --prefix=/usr --enable-network --enable-streaming && \
+        make && \
+        make DESTDIR=/ install"
+    
+    # Unmount directories
+    sudo umount "$SYSROOT_PATH/dev/pts" 2>/dev/null
+    sudo umount "$SYSROOT_PATH/dev" 2>/dev/null
+    sudo umount "$SYSROOT_PATH/sys" 2>/dev/null
+    sudo umount "$SYSROOT_PATH/proc" 2>/dev/null
+}
+
+function make_hawkbit() {
+    echo "Building HAWKBIT"
+    # Copy files from $HAWKBIT_SRC_DIR to ${G_ROOTFS_DIR}/home
+    sudo cp -r "$HAWKBIT_SRC_DIR" "${G_ROOTFS_DIR}/home/"
+
+    SYSROOT_PATH=${G_ROOTFS_DIR} 
+    
+    # Mount directories
+    sudo mount --bind /proc "$SYSROOT_PATH/proc"
+    sudo mount --bind /sys "$SYSROOT_PATH/sys"
+    sudo mount --bind /dev "$SYSROOT_PATH/dev"
+    sudo mount --bind /dev/pts "$SYSROOT_PATH/dev/pts"
+    
+    # Use chroot to run build commands
+    sudo chroot "$SYSROOT_PATH" /bin/bash -c "\
+        cd /home/hawkbit && \
+        meson setup build && \
+        ninja -C build"
+    
+    # Unmount directories
+    sudo umount "$SYSROOT_PATH/dev/pts" 2>/dev/null
+    sudo umount "$SYSROOT_PATH/dev" 2>/dev/null
+    sudo umount "$SYSROOT_PATH/sys" 2>/dev/null
+    sudo umount "$SYSROOT_PATH/proc" 2>/dev/null
+
+}
+
 # make imx sdma firmware
 # $1 -- linux-firmware directory
 # $2 -- rootfs output dir
@@ -691,6 +779,16 @@ function cmd_make_deploy()
 	get_git_src ${G_UBOOT_GIT} ${G_UBOOT_BRANCH} \
 		${G_UBOOT_SRC_DIR} ${G_UBOOT_REV}
 
+# get RAUC repository
+	echo "Cloning / RAUC Repository"
+    get_git_src_for_tag ${G_RAUC_GIT} ${RAUC_BRANCH} \
+        ${RAUC_SRC_DIR} ${RAUC_REV}
+
+	# get Hawkbit repository
+	pr_info "Get Hawkbit repository";
+	get_git_src ${G_HAWKBIT_GIT} ${HAWKBIT_BRANCH} \
+		${HAWKBIT_SRC_DIR} ${HAWKBIT_REV}
+
 	# get kernel repository
 	pr_info "Get kernel repository";
 	get_git_src ${G_LINUX_KERNEL_GIT} ${G_LINUX_KERNEL_BRANCH} \
@@ -775,6 +873,8 @@ function cmd_make_rootfs()
 		make_bcm_fw ${G_BCM_FW_SRC_DIR} ${G_ROOTFS_DIR}
 	fi
 
+	cmd_make_rauc
+
 	# pack full rootfs
 	make_tarball ${G_ROOTFS_DIR} ${G_ROOTFS_TARBALL_PATH}
 }
@@ -851,6 +951,12 @@ function cmd_make_kmodules()
 	install_kernel_modules ${G_CROSS_COMPILER_PATH}/${G_CROSS_COMPILER_PREFIX} \
 		${G_LINUX_KERNEL_DEF_CONFIG} \
 		${G_LINUX_KERNEL_SRC_DIR} ${G_ROOTFS_DIR}
+}
+
+function cmd_make_rauc()
+{
+	make_rauc ${RAUC_SRC_DIR}
+	make_hawkbit ${HAWKBIT_SRC_DIR}
 }
 
 function cmd_make_rfs_ubi() {
@@ -948,6 +1054,9 @@ case $PARAM_CMD in
 		cmd_make_kernel_header_deb &&
 		cmd_make_freertos_variscite &&
 		cmd_make_variscite_rootfs
+		;;
+	rauc )
+		cmd_make_rauc
 		;;
 	all )
 		cmd_make_uboot  &&
