@@ -318,6 +318,11 @@ protected_install libcurl4-openssl-dev
 protected_install libnl-genl-3-dev
 protected_install meson
 
+protected_install libcairo2-dev
+protected isntall libegl1-mesa-dev
+protected_install nbd-client
+
+
 # packages required when flashing emmc
 protected_install dosfstools
 
