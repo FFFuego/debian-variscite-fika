@@ -712,16 +712,6 @@ function cmd_make_deploy()
 	get_git_src ${G_UBOOT_GIT} ${G_UBOOT_BRANCH} \
 		${G_UBOOT_SRC_DIR} ${G_UBOOT_REV}
 
-# get RAUC repository
-	echo "Cloning / RAUC Repository"
-    get_git_src_for_tag ${G_RAUC_GIT} ${RAUC_BRANCH} \
-        ${RAUC_SRC_DIR} ${RAUC_REV}
-
-	# get Hawkbit repository
-	pr_info "Get Hawkbit repository";
-	get_git_src ${G_HAWKBIT_GIT} ${HAWKBIT_BRANCH} \
-		${HAWKBIT_SRC_DIR} ${HAWKBIT_REV}
-
 	# get kernel repository
 	pr_info "Get kernel repository";
 	get_git_src ${G_LINUX_KERNEL_GIT} ${G_LINUX_KERNEL_BRANCH} \
